@@ -1,0 +1,6 @@
+opencv-contrib-python
+numpy
+pandas
+PySide6
+pyqtgraph
+matplotlib
