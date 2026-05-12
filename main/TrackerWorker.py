@@ -3,6 +3,8 @@ import numpy as np
 from AnalysisConfig import AnalysisConfig
 from typing import Dict, List, Optional, Tuple
 import cv2
+import os
+from MetricsEngine import MetricsEngine
 
 class TrackerWorker(QThread):
     frame_ready = Signal(np.ndarray)

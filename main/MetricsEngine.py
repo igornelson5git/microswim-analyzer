@@ -11,6 +11,7 @@ class MetricsEngine:
     def add_motion_stats(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         cfg = self.config
+        window = max(1, int(cfg.smoothing_window))
 
         df["x_um"] = df["corrected_x_px"] * cfg.microns_per_pixel
         df["y_um"] = df["corrected_y_px"] * cfg.microns_per_pixel
@@ -19,17 +20,29 @@ class MetricsEngine:
         df["dy_um"] = df["y_um"].diff()
         df["dt_s"] = df["time_s"].diff()
 
+        HEADING_STEP = max(2, window // 2)
+
         df["step_distance_um"] = np.sqrt(df["dx_um"] ** 2 + df["dy_um"] ** 2)
         df["speed_um_s"] = df["step_distance_um"] / df["dt_s"]
 
-        df["heading_rad"] = np.arctan2(df["dy_um"], df["dx_um"])
+        df["heading_dx_um"] = (
+            df["x_um"].shift(-HEADING_STEP) - df["x_um"].shift(HEADING_STEP)
+        )
+
+        df["heading_dy_um"] = (
+            df["y_um"].shift(-HEADING_STEP) - df["y_um"].shift(HEADING_STEP)
+        )
+
+        df["heading_rad"] = np.arctan2(
+            df["heading_dy_um"],
+            df["heading_dx_um"],
+        )
         heading_filled = df["heading_rad"].ffill().fillna(0)
         df["heading_unwrapped_rad"] = np.unwrap(heading_filled)
 
         df["turn_angle_deg"] = np.degrees(df["heading_unwrapped_rad"].diff())
         df["abs_turn_deg"] = df["turn_angle_deg"].abs()
 
-        window = max(1, int(cfg.smoothing_window))
         df["speed_smooth_um_s"] = (
             df["speed_um_s"].rolling(window, center=True, min_periods=1).median()
         )

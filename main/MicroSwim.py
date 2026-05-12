@@ -9,7 +9,7 @@ from MetricsEngine import MetricsEngine
 import cv2
 import numpy as np
 import pandas as pd
-
+from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, QThread, Signal, Slot
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
@@ -31,11 +31,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-try:
-    import pyqtgraph as pg
-except ImportError:
-    pg = None
 
 
 SUMMARY_METRICS = {
@@ -80,7 +75,7 @@ class MicroSwim(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("MicroSwim Analyzer")
-        self.resize(1350, 850)
+        self.resize(760, 520)
         self.worker: Optional[TrackerWorker] = None
 
         self.video_path_edit = QLineEdit()
@@ -105,20 +100,14 @@ class MicroSwim(QMainWindow):
 
         self.video_label = QLabel("Choose a video, then click Start.")
         self.video_label.setAlignment(Qt.AlignCenter)
-        self.video_label.setMinimumSize(760, 520)
+        self.video_label.setMinimumSize(640, 420)
         self.video_label.setStyleSheet("background: #111; color: #ddd; border: 1px solid #333;")
 
         self.status_label = QLabel("Idle")
         self.live_labels: Dict[str, QLabel] = {}
         self.metric_checks: Dict[str, QCheckBox] = {}
 
-        self.speed_curve = None
-        self.turn_curve = None
-        self.speed_plot = None
-        self.turn_plot = None
-        self.plot_times: List[float] = []
-        self.plot_speeds: List[float] = []
-        self.plot_turns: List[float] = []
+
 
         self.build_ui()
         self.connect_signals()
@@ -142,7 +131,7 @@ class MicroSwim(QMainWindow):
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_scroll.setWidget(left_widget)
-        left_scroll.setFixedWidth(390)
+        left_scroll.setFixedWidth(320)
 
         file_group = QGroupBox("Files")
         file_layout = QGridLayout(file_group)
@@ -210,25 +199,7 @@ class MicroSwim(QMainWindow):
             live_grid.addWidget(value, i // 2, (i % 2) * 2 + 1)
         right_layout.addWidget(live_group)
 
-        if pg is not None:
-            plots = QWidget()
-            plots_layout = QHBoxLayout(plots)
-            self.speed_plot = pg.PlotWidget(title="Speed vs time")
-            self.speed_plot.setLabel("left", "Speed", units="um/s")
-            self.speed_plot.setLabel("bottom", "Time", units="s")
-            self.speed_curve = self.speed_plot.plot([], [])
-
-            self.turn_plot = pg.PlotWidget(title="Mean absolute turn / alignment proxy")
-            self.turn_plot.setLabel("left", "Value")
-            self.turn_plot.setLabel("bottom", "Time", units="s")
-            self.turn_curve = self.turn_plot.plot([], [])
-
-            plots_layout.addWidget(self.speed_plot)
-            plots_layout.addWidget(self.turn_plot)
-            right_layout.addWidget(plots, stretch=2)
-        else:
-            right_layout.addWidget(QLabel("Install pyqtgraph for live plots: pip install pyqtgraph"))
-
+        
         right_layout.addWidget(self.status_label)
 
         root.addWidget(left_scroll)
@@ -285,6 +256,9 @@ class MicroSwim(QMainWindow):
 
     def selected_summary_metrics(self) -> List[str]:
         return [key for key, cb in self.metric_checks.items() if cb.isChecked()]
+    
+    def cleanup_worker(self):
+        self.worker = None
 
     def start_tracking(self):
         try:
@@ -293,20 +267,13 @@ class MicroSwim(QMainWindow):
             QMessageBox.warning(self, "Invalid setup", str(exc))
             return
 
-        self.plot_times.clear()
-        self.plot_speeds.clear()
-        self.plot_turns.clear()
-        if self.speed_curve is not None:
-            self.speed_curve.setData([], [])
-        if self.turn_curve is not None:
-            self.turn_curve.setData([], [])
-
         self.worker = TrackerWorker(cfg, self.selected_summary_metrics())
         self.worker.frame_ready.connect(self.update_frame)
         self.worker.metrics_ready.connect(self.update_metrics)
         self.worker.finished_ok.connect(self.finished_ok)
         self.worker.failed.connect(self.failed)
         self.worker.status_changed.connect(self.set_status)
+        self.worker.finished.connect(self.cleanup_worker)
         self.worker.start()
 
         self.start_btn.setEnabled(False)
@@ -360,19 +327,6 @@ class MicroSwim(QMainWindow):
             else:
                 label.setText(str(value))
 
-        t = metrics.get("time_s")
-        speed = metrics.get("speed_smooth_um_s")
-        turn = metrics.get("mean_abs_turn_deg")
-        if t is not None and speed is not None and not np.isnan(speed):
-            self.plot_times.append(float(t))
-            self.plot_speeds.append(float(speed))
-            if self.speed_curve is not None:
-                self.speed_curve.setData(self.plot_times, self.plot_speeds)
-        if t is not None and turn is not None and not np.isnan(turn):
-            self.plot_turns.append(float(turn))
-            if self.turn_curve is not None:
-                self.turn_curve.setData(self.plot_times[-len(self.plot_turns):], self.plot_turns)
-
     @Slot(str, str, dict)
     def finished_ok(self, tracking_csv: str, summary_csv: str, summary: dict):
         self.reset_buttons()
@@ -403,7 +357,6 @@ class MicroSwim(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.reselect_btn.setEnabled(False)
         self.pause_btn.setText("Pause")
-        self.worker = None
 
     def closeEvent(self, event):
         if self.worker:
@@ -414,6 +367,11 @@ class MicroSwim(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+
+    font = QFont()
+    font.setPointSize(8)
+    app.setFont(font)
+
     win = MicroSwim()
     win.show()
     sys.exit(app.exec())
