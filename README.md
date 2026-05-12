@@ -185,6 +185,8 @@ igornelson5@hotmail.com
 
 If you use MicroSwim Analyzer in academic work, please cite the associated publication (to be added).
 
+https://doi.org/10.5281/zenodo.20135283
+
 ---
 
 # Status
